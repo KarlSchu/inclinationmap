@@ -70,6 +70,7 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             import time
             import csv
             import subprocess
+            from datetime import datetime
 
             # Parse the JSON payload
             payload = json.loads(body.decode('utf-8'))
@@ -77,13 +78,13 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             # Save received payload as a timestamped file under 'received/'
             os.makedirs(DIR_RECEIVED_FILES, exist_ok=True)
-            timestamp = int(time.time())
-            fname = f"{DIR_RECEIVED_FILES}/data_{timestamp}.json"
+            timestamp_str = datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
+            fname = f"{DIR_RECEIVED_FILES}/data_{timestamp_str}.json"
             with open(fname, 'wb') as f:
                 f.write(body)
 
             # Generate CSV from data
-            csv_filename = f"{DIR_RECEIVED_FILES}/data_{timestamp}.csv"
+            csv_filename = f"{DIR_RECEIVED_FILES}/data_{timestamp_str}.csv"
             map_filename = None
             if data:
                 with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
@@ -101,7 +102,7 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                 # Generate map using csv_to_map.py
                 os.makedirs(DIR_CREATED_FILES, exist_ok=True)
-                map_filename = f"{DIR_CREATED_FILES}/map_{timestamp}.html"
+                map_filename = f"{DIR_CREATED_FILES}/map_{timestamp_str}.html"
                 result = subprocess.run(
                     ['python3', 'csv_to_map.py', csv_filename, map_filename],
                     capture_output=True,

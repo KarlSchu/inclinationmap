@@ -378,7 +378,14 @@
             const encodedUri = encodeURI(csvContent);
             const link = document.createElement('a');
             link.setAttribute('href', encodedUri);
-            link.setAttribute('download', 'collected_data_' + new Date().getTime() + '.csv');
+            const now = new Date();
+            const timestamp = now.getFullYear() + '-' +
+                String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                String(now.getDate()).padStart(2, '0') + '_' +
+                String(now.getHours()).padStart(2, '0') + '_' +
+                String(now.getMinutes()).padStart(2, '0') + '_' +
+                String(now.getSeconds()).padStart(2, '0');
+            link.setAttribute('download', 'collected_data_' + timestamp + '.csv');
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);

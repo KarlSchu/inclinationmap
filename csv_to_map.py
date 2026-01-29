@@ -137,6 +137,21 @@ def create_map(data, output_file='gps_map.html'):
     # Save map
     try:
         m.save(output_file)
+        
+        # Add favicon to generated map
+        try:
+            with open(output_file, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            # Add favicon link in the <head> section
+            favicon_link = '<link rel="icon" type="image/svg+xml" href="../icon.svg">\n    '
+            if '<head>' in html_content and favicon_link not in html_content:
+                html_content = html_content.replace('<head>', '<head>\n    ' + favicon_link)
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+        except Exception as e:
+            print(f"Warning: Could not add favicon to map: {e}")
+        
         print(f"✓ Map created successfully: {output_file}")
         print(f"  Total points: {len(data)}")
         print(f"  Center: ({avg_latitude:.6f}, {avg_longitude:.6f})")
