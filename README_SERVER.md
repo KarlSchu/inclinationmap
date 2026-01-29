@@ -141,15 +141,15 @@ Accepts GPS data and generates a map
 ```json
 {
   "status": "ok",
-  "received": "received/received_data_1704067200.json",
-  "map": "/created_maps/map_1704067200.html"
+  "received": "received_data/data_2026-01-29_14_32_45.json",
+  "map": "/created_maps/map_2026-01-29_14_32_45.html"
 }
 ```
 
 The server will:
-1. Save the JSON data to `received/received_data_<timestamp>.json`
-2. Convert to CSV at `received/received_data_<timestamp>.csv`
-3. Generate an interactive map at `created_maps/map_<timestamp>.html`
+1. Save the JSON data to `received_data/data_<YYYY-MM-DD_HH_MM_SS>.json` (server time)
+2. Convert to CSV at `received_data/data_<YYYY-MM-DD_HH_MM_SS>.csv`
+3. Generate an interactive map at `created_maps/map_<YYYY-MM-DD_HH_MM_SS>.html`
 4. Return the map URL to the client
 
 ## File Structure

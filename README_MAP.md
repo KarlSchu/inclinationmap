@@ -70,6 +70,7 @@ python3 csv_to_map.py /path/to/collected_data.csv /path/to/output_map.html
 ✅ **Tooltips** - Hover over markers to see quick information  
 ✅ **Responsive Design** - Works on desktop, tablet, and mobile browsers  
 ✅ **Layer Control** - Toggle map layers on/off for better visibility  
+✅ **Favicon** - Generated maps include a reference to `icon.svg` so browsers show the app icon when opening the map HTML.
 
 ## Expected CSV Format
 

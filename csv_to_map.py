@@ -105,14 +105,12 @@ def create_map(data, output_file='gps_map.html'):
 
         # Color code based on inclination angle
         abs_inclination = abs(inclination)
-        if abs_inclination < 3:
-            color = 'orange'  # Near zero
-        elif inclination < 0:
-            color = 'green'   # Negative
+        if abs_inclination < 0.5:
+            color = 'green'  # Near zero
+        elif inclination < -0.5:
+            color = 'orange'   
         else:
-            color = 'red'     # Positive
-
-        # Add marker with popup into the marker cluster
+            color = 'blue'
         folium.Marker(
             location=[latitude, longitude],
             popup=folium.Popup(popup_text, max_width=300),

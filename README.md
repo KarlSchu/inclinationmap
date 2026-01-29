@@ -137,10 +137,10 @@ pip install folium
 - Manually clear with the "Clear Data" button
 
 ### Server-Side
-When you send data to the server, it's stored as:
-- **JSON**: `received_data/received_data_<timestamp>.json` (raw submission)
-- **CSV**: `received_data/data_<timestamp>.csv` (converted format)
-- **HTML Map**: `created_maps/map_<timestamp>.html` (interactive folium map)
+When you send data to the server, it's stored using a human-readable timestamp format (`YYYY-MM-DD_HH_MM_SS`), for example:
+- **JSON**: `received_data/data_2026-01-29_14_32_45.json` (raw submission)
+- **CSV**: `received_data/data_2026-01-29_14_32_45.csv` (converted format)
+- **HTML Map**: `created_maps/map_2026-01-29_14_32_45.html` (interactive folium map)
 
 ## 🗺️ Map Generation
 

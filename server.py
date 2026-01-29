@@ -135,6 +135,23 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Custom logging
         print(f"[{self.log_date_time_string()}] {format % args}")
 
+    def list_directory(self, path):
+        """Restrict directory listing: allow only DIR_CREATED_FILES, forbid others."""
+        try:
+            # Resolve real paths
+            requested = os.path.realpath(path)
+            allowed = os.path.realpath(os.path.join(os.getcwd(), DIR_CREATED_FILES))
+
+            # Allow listing only when requested path is inside the created_maps directory
+            if os.path.commonpath([requested, allowed]) == allowed:
+                return super().list_directory(path)
+        except Exception:
+            pass
+
+        # Deny directory listing for all other directories
+        self.send_error(403, "Directory listing is prohibited")
+        return None
+
 
 def generate_self_signed_cert():
     """Generate a self-signed certificate if it doesn't exist"""
