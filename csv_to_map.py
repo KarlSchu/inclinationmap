@@ -137,11 +137,29 @@ def create_map(data, output_file="gps_map.html", mode="cluster", base_offset=0.0
             key = (round(entry["latitude"], 5), round(entry["longitude"], 5))
             groups.setdefault(key, []).append(entry)
 
+        # First, add all original coordinate points as small circles
         for key, entries in groups.items():
+            orig_lat = key[0]
+            orig_lon = key[1]
+            # Add a small circle marker at the original coordinate
+            folium.CircleMarker(
+                location=[orig_lat, orig_lon],
+                radius=3,
+                color="black",
+                fill=True,
+                fillColor="gray",
+                fillOpacity=0.5,
+                weight=1,
+                popup=f"Original: {orig_lat:.6f}, {orig_lon:.6f}",
+                tooltip="Original coordinate",
+            ).add_to(m)
+
+        # Then add spread markers with arrows back to originals
+        for key, entries in groups.items():
+            orig_lat = key[0]
+            orig_lon = key[1]
             n = len(entries)
             for i, entry in enumerate(entries):
-                orig_lat = entry["latitude"]
-                orig_lon = entry["longitude"]
                 latitude = orig_lat
                 longitude = orig_lon
 
@@ -179,6 +197,16 @@ def create_map(data, output_file="gps_map.html", mode="cluster", base_offset=0.0
                     icon=folium.Icon(color=color, icon="info-sign"),
                     prefix="fa",
                 ).add_to(m)
+
+                # Add an arrow (dashed line) from the spread marker back to the original
+                if n > 1:
+                    folium.PolyLine(
+                        locations=[[latitude, longitude], [orig_lat, orig_lon]],
+                        color="gray",
+                        weight=1,
+                        opacity=0.5,
+                        dash_array="5, 5",
+                    ).add_to(m)
 
     # Add a line connecting all points in order
     coordinates = [[d["latitude"], d["longitude"]] for d in data]
