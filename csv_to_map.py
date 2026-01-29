@@ -14,6 +14,8 @@ import json
 import os
 import pathlib
 import sys
+import math
+import argparse
 
 try:
     import folium
@@ -66,9 +68,12 @@ def read_csv_file(filepath):
         return None
 
 
-def create_map(data, output_file="gps_map.html"):
+def create_map(data, output_file="gps_map.html", mode="cluster", base_offset=0.00001):
     """
     Create an interactive map with GPS coordinates and inclination data
+    mode: "spread" or "cluster"
+    base_offset: offset in degrees for spreading markers when in "spread" mode
+    0.00001 degrees is approx 1.1 meters
     """
     if not data or len(data) == 0:
         print("Error: No data to plot.")
@@ -83,49 +88,97 @@ def create_map(data, output_file="gps_map.html"):
         location=[avg_latitude, avg_longitude], zoom_start=30, tiles="OpenStreetMap"
     )
 
-    # Use a MarkerCluster with spiderfy enabled so overlapping markers can be expanded
-    marker_cluster = plugins.MarkerCluster(
-        options={
-            "spiderfyOnMaxZoom": True,
-            "showCoverageOnHover": False,
-            "removeOutsideVisibleBounds": False,
-        }
-    ).add_to(m)
+    # Choose behavior: clustered or spread
+    if mode == "cluster":
+        marker_cluster = plugins.MarkerCluster(
+            options={
+                "spiderfyOnMaxZoom": True,
+                "showCoverageOnHover": False,
+                "removeOutsideVisibleBounds": False,
+            }
+        ).add_to(m)
 
-    # Add markers for each data point into the cluster
-    for entry in data:
-        latitude = entry["latitude"]
-        longitude = entry["longitude"]
-        inclination = entry["inclination"]
-        index = entry["index"]
-        datetime = entry["datetime"]
+        for entry in data:
+            latitude = entry["latitude"]
+            longitude = entry["longitude"]
+            inclination = entry["inclination"]
+            index = entry["index"]
+            datetime = entry["datetime"]
 
-        # Create popup with detailed information
-        # Format inclination as +/- from 0
-        inclination_sign = "+" if inclination >= 0 else ""
-        popup_text = f"""
-        <b>Entry #{index}</b><br>
-        <b>DateTime:</b> {datetime}<br>
-        <b>Latitude:</b> {latitude:.6f}<br>
-        <b>Longitude:</b> {longitude:.6f}<br>
-        <b>Inclination:</b> {inclination_sign}{inclination:.2f}°
-        """
+            inclination_sign = "+" if inclination >= 0 else ""
+            popup_text = f"""
+            <b>Entry #{index}</b><br>
+            <b>DateTime:</b> {datetime}<br>
+            <b>Latitude:</b> {latitude:.6f}<br>
+            <b>Longitude:</b> {longitude:.6f}<br>
+            <b>Inclination:</b> {inclination_sign}{inclination:.2f}°
+            """
 
-        # Color code based on inclination angle
-        abs_inclination = abs(inclination)
-        if abs_inclination < 0.5:
-            color = "green"  # Near zero
-        elif inclination < -0.5:
-            color = "orange"
-        else:
-            color = "blue"
-        folium.Marker(
-            location=[latitude, longitude],
-            popup=folium.Popup(popup_text, max_width=300),
-            tooltip=f"#{index}: {inclination_sign}{inclination:.2f}°",
-            icon=folium.Icon(color=color, icon="info-sign"),
-            prefix="fa",
-        ).add_to(marker_cluster)
+            abs_inclination = abs(inclination)
+            if abs_inclination < 0.5:
+                color = "green"
+            elif inclination < -0.5:
+                color = "orange"
+            else:
+                color = "blue"
+
+            folium.Marker(
+                location=[latitude, longitude],
+                popup=folium.Popup(popup_text, max_width=300),
+                tooltip=f"#{index}: {inclination_sign}{inclination:.2f}°",
+                icon=folium.Icon(color=color, icon="info-sign"),
+                prefix="fa",
+            ).add_to(marker_cluster)
+    else:
+        # Spread markers that are very close to each other by applying
+        # a small deterministic offset so points remain individually clickable
+        groups = {}
+        for entry in data:
+            key = (round(entry["latitude"], 5), round(entry["longitude"], 5))
+            groups.setdefault(key, []).append(entry)
+
+        for key, entries in groups.items():
+            n = len(entries)
+            for i, entry in enumerate(entries):
+                orig_lat = entry["latitude"]
+                orig_lon = entry["longitude"]
+                latitude = orig_lat
+                longitude = orig_lon
+
+                if n > 1:
+                    angle = 2 * math.pi * i / n
+                    radius = base_offset * (1 + (i // 8))
+                    latitude = orig_lat + math.cos(angle) * radius
+                    longitude = orig_lon + math.sin(angle) * radius
+
+                inclination = entry["inclination"]
+                index = entry["index"]
+                datetime = entry["datetime"]
+
+                inclination_sign = "+" if inclination >= 0 else ""
+                popup_text = f"""
+                <b>Entry #{index}</b><br>
+                <b>DateTime:</b> {datetime}<br>
+                <b>Latitude:</b> {orig_lat:.6f}<br>
+                <b>Longitude:</b> {orig_lon:.6f}<br>
+                <b>Inclination:</b> {inclination_sign}{inclination:.2f}°
+                """
+
+                abs_inclination = abs(inclination)
+                if abs_inclination < 0.5:
+                    color = "green"
+                elif inclination < -0.5:
+                    color = "orange"
+                else:
+                    color = "blue"
+
+                folium.Marker(
+                    location=[latitude, longitude],
+                    popup=folium.Popup(popup_text, max_width=300),
+                    tooltip=f"#{index}: {inclination_sign}{inclination:.2f}°",
+                    icon=folium.Icon(color=color, icon="info-sign"),
+                    prefix="fa",
+                ).add_to(m)
 
     # Add a line connecting all points in order
     coordinates = [[d["latitude"], d["longitude"]] for d in data]
@@ -203,31 +256,26 @@ def convert_json_to_csv(json_file, csv_file):
 
 def main():
     """Main function"""
-    if len(sys.argv) < 2:
-        # Try to find the most recent CSV file
+    parser = argparse.ArgumentParser(description="Convert CSV/JSON data to an interactive map")
+    parser.add_argument("in_file", nargs="?", help="Input CSV or JSON file (if omitted, uses latest collected_data_*.csv)")
+    parser.add_argument("output_file", nargs="?", help="Output HTML file (default: created_maps/gps_map.html)")
+    parser.add_argument("--mode", choices=["spread", "cluster"], default="spread", help="Display mode for markers: spread or cluster (default: spread)")
+    parser.add_argument("--offset", type=float, default=0.00002, help="Base offset in degrees when using spread mode (default: 0.00002)")
+    args = parser.parse_args()
+
+    in_file = args.in_file
+    if not in_file:
         csv_files = list(Path(".").glob("collected_data_*.csv"))
         if csv_files:
             in_file = sorted(csv_files, reverse=True)[0]
             print(f"No file specified. Using most recent: {in_file}")
         else:
-            print("Usage: python3 csv_to_map.py <csv_file> [output_file.html]")
-            print("\nExample:")
-            print("  python3 csv_to_map.py collected_data_1234567890.csv")
-            print("  python3 csv_to_map.py collected_data_1234567890.csv my_map.html")
-            print(
-                "\nThe script reads CSV files exported from measures.html and creates"
-            )
-            print("an interactive map showing GPS coordinates with inclination data.")
+            parser.print_help()
             sys.exit(1)
-    else:
-        in_file = sys.argv[1]
 
-    # Get output file name
-    if len(sys.argv) > 2:
-        output_file = sys.argv[2]
-    else:
-        output_file = os.path.join(DIR_CREATED_FILES, "gps_map.html")
+    output_file = args.output_file if args.output_file else os.path.join(DIR_CREATED_FILES, "gps_map.html")
 
+    # If input is JSON, convert to CSV first
     if pathlib.Path(in_file).suffix.lower() == ".json":
         json_file = in_file
         csv_file = os.path.splitext(in_file)[0] + ".csv"
@@ -239,6 +287,8 @@ def main():
                 csv_file = f"{os.path.splitext(csv_file)[0][:-4]}_{index:03d}.csv"
             index += 1
         convert_json_to_csv(json_file, csv_file)
+    else:
+        csv_file = in_file
 
     print(f"Reading CSV file: {csv_file}")
 
@@ -249,8 +299,8 @@ def main():
 
     print(f"Loaded {len(data)} data entries.")
 
-    # Create map
-    if create_map(data, output_file):
+    # Create map with chosen mode and offset
+    if create_map(data, output_file, mode=args.mode, base_offset=args.offset):
         sys.exit(0)
     else:
         sys.exit(1)

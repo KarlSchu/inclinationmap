@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": "received_data/data_2026-01-29_20_00_56-Cat62.json",
+            "args": ["received_data/data_2026-01-29_20_00_56-Cat62.json","--mode=spread", "--offset=0.1"],
             "python": "/bin/python3"
         }
     ]
