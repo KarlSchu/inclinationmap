@@ -56,6 +56,111 @@
         let isRequestingPermissions = false;
         let lastMapUrl = null;
 
+        // Debug UI activation (visible only when ?debug is present)
+        const urlParams = new URLSearchParams(window.location.search);
+        const DEBUG_UI = urlParams.has('debug');
+
+        // Diagnostic timers and UI helper
+        const diagTimers = {};
+        function diagStart(name) {
+            diagTimers[name] = performance.now();
+            if (DEBUG_UI) ensureDebugPanel();
+            if (DEBUG_UI) appendDebug(`${name} started`);
+        }
+        function diagEnd(name) {
+            const start = diagTimers[name];
+            if (!start) return null;
+            const dur = performance.now() - start;
+            delete diagTimers[name];
+            const text = `${name}: ${dur.toFixed(1)}ms`;
+            console.log(text);
+            if (DEBUG_UI) {
+                ensureDebugPanel();
+                appendDebug(text);
+            }
+            return dur;
+        }
+        function ensureDebugPanel() {
+            if (document.getElementById('debugPanelContainer')) return;
+            const container = document.createElement('div');
+            container.id = 'debugPanelContainer';
+            container.style.position = 'fixed';
+            container.style.right = '10px';
+            container.style.top = '10px';
+            container.style.zIndex = '9999';
+            container.style.maxWidth = '320px';
+
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.alignItems = 'center';
+            header.style.justifyContent = 'space-between';
+            header.style.background = 'rgba(0,0,0,0.9)';
+            header.style.color = '#fff';
+            header.style.padding = '6px 8px';
+            header.style.cursor = 'pointer';
+            header.style.fontSize = '13px';
+
+            const title = document.createElement('span');
+            title.textContent = 'Debug';
+            title.style.color = '#0f0';
+
+            const toggleBtn = document.createElement('button');
+            toggleBtn.id = 'debugToggleBtn';
+            toggleBtn.style.background = 'transparent';
+            toggleBtn.style.border = 'none';
+            toggleBtn.style.color = '#fff';
+            toggleBtn.style.cursor = 'pointer';
+            toggleBtn.style.fontSize = '13px';
+
+            header.appendChild(title);
+            header.appendChild(toggleBtn);
+
+            const content = document.createElement('pre');
+            content.id = 'debugPanel';
+            content.style.background = 'rgba(0,0,0,0.8)';
+            content.style.color = '#0f0';
+            content.style.margin = '0';
+            content.style.padding = '8px';
+            content.style.maxHeight = '60vh';
+            content.style.overflow = 'auto';
+            content.style.fontSize = '12px';
+            content.style.lineHeight = '1.2';
+            content.style.whiteSpace = 'pre-wrap';
+
+            container.appendChild(header);
+            container.appendChild(content);
+            document.body.appendChild(container);
+
+            function setCollapsed(collapsed) {
+                if (collapsed) {
+                    content.style.display = 'none';
+                    toggleBtn.textContent = '▸';
+                } else {
+                    content.style.display = 'block';
+                    toggleBtn.textContent = '▾';
+                }
+                try { localStorage.setItem('debugPanel_collapsed', collapsed ? '1' : '0'); } catch (e) {}
+            }
+
+            function toggleDebugPanel() {
+                const current = document.getElementById('debugPanel').style.display === 'none';
+                setCollapsed(!current);
+            }
+
+            header.addEventListener('click', toggleDebugPanel);
+            toggleBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleDebugPanel(); });
+
+            const collapsed = (function(){ try { return localStorage.getItem('debugPanel_collapsed') === '1'; } catch(e){return false;} })();
+            setCollapsed(collapsed);
+        }
+
+        function appendDebug(text) {
+            const panel = document.getElementById('debugPanel');
+            if (!panel) return;
+            const ts = new Date().toISOString().replace('T',' ').replace('Z','');
+            panel.textContent = `${ts} - ${text}\n` + panel.textContent;
+        }
+
         // LocalStorage functions
         function saveToLocalStorage() {
             try {
@@ -168,6 +273,10 @@
             const progressContainer = document.getElementById('progressContainer');
             const progressBar = document.getElementById('progressBar');
             const collectBtn = document.getElementById('collectBtn');
+            // Timing for diagnostics
+            diagStart('collect_total');
+            diagStart('collect_geolocation_wait');
+
             progressContainer.style.display = 'block';
             progressBar.value = 0;
             collectBtn.disabled = true;
@@ -175,8 +284,10 @@
 
             if (navigator.geolocation) {
                 progressBar.value = 50;
+                // Start geolocation request
                 navigator.geolocation.getCurrentPosition(
                     (position) => {
+                        diagEnd('collect_geolocation_wait');
                         const latitude = position.coords.latitude;
                         const longitude = position.coords.longitude;
                         // Use captured orientation data or fall back to random value
@@ -192,8 +303,13 @@
 
                         progressBar.value = 90;
                         collectedData.push({ index: collectedData.length + 1, dateTime, latitude, longitude, inclination });
+                        diagStart('save_localstorage');
                         saveToLocalStorage();
+                        diagEnd('save_localstorage');
+                        diagStart('update_table');
                         updateTable();
+                        diagEnd('update_table');
+
                         progressBar.value = 100;
                         const inclinationSign = inclination >= 0 ? '+' : '';
                         showStatus(`✓ Data collected! Latitude: ${latitude.toFixed(4)}, Longitude: ${longitude.toFixed(4)}, Inclination: ${inclinationSign}${inclination.toFixed(2)}°`, 'success', 10000);
@@ -201,9 +317,12 @@
                             progressContainer.style.display = 'none';
                             showStatus('ready', 'success', 1);
                             collectBtn.disabled = false;
+                            diagEnd('collect_total');
                         }, 1000);
                     },
                     (error) => {
+                        diagEnd('collect_geolocation_wait');
+                        diagEnd('collect_total');
                         console.error('Geolocation error:', error);
                         showStatus('Unable to retrieve location. Please check permissions.', 'error');
                         progressBar.value = 10;
@@ -211,6 +330,8 @@
                     }
                 );
             } else {
+                try { console.timeEnd('collect_geolocation_wait'); } catch (e) {}
+                try { console.timeEnd('collect_total'); } catch (e) {}
                 showStatus('Geolocation is not supported by this browser.', 'error');
                 setTimeout(() => {
                     progressContainer.style.display = 'none';

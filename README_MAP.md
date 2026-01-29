@@ -51,10 +51,14 @@ python3 csv_to_map.py /path/to/collected_data.csv /path/to/output_map.html
 
 ✅ **Interactive Map** - Zoom, pan, and explore your GPS data  
 ✅ **Color-Coded Markers** - Inclination angle visualized by marker color:
-   - 🟢 **Green**: Low inclination (0-30°)
-   - 🟠 **Orange**: Medium inclination (30-60°)
-   - 🔴 **Red**: High inclination (60-90°)
-   - 🟣 **Purple**: Steep/vertical (90°+)
+   - 🟢 **Green**: Negative inclination
+   - 🟠 **Orange**: Near zero inclination (±5°)
+   - 🔴 **Red**: Positive inclination
+
+✅ **Marker Clustering** - Overlapping markers are grouped and can be expanded:
+   - Click a cluster to spiderfy (expand) overlapping markers
+   - All nearby points become individually accessible
+   - Prevents markers from obscuring each other
 
 ✅ **Detailed Popups** - Click any marker to see:
    - Entry number (index)
@@ -140,6 +144,24 @@ Open `sample_map.html` in any web browser. You'll see:
 - A blue line connecting them in order
 - Popups showing details for each point
 - Interactive zoom and pan controls
+
+## Marker Clustering
+
+When multiple GPS points are collected at the same or very close locations, markers are automatically clustered to prevent overlapping:
+
+- **Clustered View** - Shows number of points in a circle (e.g., "5")
+- **Spiderfy** - Click a cluster to expand it and reveal individual markers radiating outward
+- **Automatic Grouping** - Clustering adjusts based on zoom level
+- **Full Visibility** - All data points remain visible and accessible
+
+### Example Workflow with Clustering
+
+1. Collect 10 points at slightly different locations
+2. Click "Send to Server" to generate the map
+3. Open the generated map
+4. If points are close together, they appear as a cluster (e.g., "10")
+5. Click the cluster to see individual markers spread out
+6. Click any marker to view its details (coordinates, inclination, timestamp)
 
 ## Troubleshooting
 

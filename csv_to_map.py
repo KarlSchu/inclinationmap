@@ -75,14 +75,23 @@ def create_map(data, output_file='gps_map.html'):
         tiles='OpenStreetMap'
     )
     
-    # Add markers for each data point
+    # Use a MarkerCluster with spiderfy enabled so overlapping markers can be expanded
+    marker_cluster = plugins.MarkerCluster(
+        options={
+            'spiderfyOnMaxZoom': True,
+            'showCoverageOnHover': False,
+            'removeOutsideVisibleBounds': False
+        }
+    ).add_to(m)
+
+    # Add markers for each data point into the cluster
     for entry in data:
         latitude = entry['latitude']
         longitude = entry['longitude']
         inclination = entry['inclination']
         index = entry['index']
         datetime = entry['datetime']
-        
+
         # Create popup with detailed information
         # Format inclination as +/- from 0
         inclination_sign = '+' if inclination >= 0 else ''
@@ -93,25 +102,24 @@ def create_map(data, output_file='gps_map.html'):
         <b>Longitude:</b> {longitude:.6f}<br>
         <b>Inclination:</b> {inclination_sign}{inclination:.2f}°
         """
-        
+
         # Color code based on inclination angle
-        # Green for negative, Red for positive, Orange for near zero
         abs_inclination = abs(inclination)
-        if abs_inclination < 5:
+        if abs_inclination < 3:
             color = 'orange'  # Near zero
         elif inclination < 0:
             color = 'green'   # Negative
         else:
             color = 'red'     # Positive
-        
-        # Add marker with popup
+
+        # Add marker with popup into the marker cluster
         folium.Marker(
             location=[latitude, longitude],
             popup=folium.Popup(popup_text, max_width=300),
             tooltip=f"#{index}: {inclination_sign}{inclination:.2f}°",
             icon=folium.Icon(color=color, icon='info-sign'),
             prefix='fa'
-        ).add_to(m)
+        ).add_to(marker_cluster)
     
     # Add a line connecting all points in order
     coordinates = [[d['latitude'], d['longitude']] for d in data]

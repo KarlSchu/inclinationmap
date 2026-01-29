@@ -11,10 +11,11 @@ with automatic interactive map generation. Works offline and can be installed on
 - **Phone Inclination** - Measures device tilt angle
 - **Local Storage** - Data persists across page reloads
 - **Export to CSV** - Download collected data as CSV files
-- **Interactive Maps** - Automatic generation of beautiful, zoomable maps
+- **Interactive Maps** - Automatic generation of beautiful, zoomable maps with marker clustering
 - **HTTPS Server** - Secure local development with self-signed certificates
 - **REST API** - Submit data to server for processing
 - **Responsive Design** - Works on all modern devices
+- **Debug Mode** - Performance timing diagnostics (use `?debug` query parameter)
 
 ## 🚀 Quick Start
 ### 1. Install Dependencies
@@ -67,6 +68,21 @@ Example: `https://192.168.1.100:8444`
    - Click "Export as CSV" to download locally
    - Click "Send to Server" to upload and generate a map
 5. **View Map** → Click "View Map" to see the interactive map in a new tab
+
+### Debug Mode
+
+For performance diagnostics and troubleshooting:
+```
+https://localhost:8444/measures.html?debug
+```
+
+This displays a collapsible debug panel (top-right) showing:
+- Geolocation wait time
+- LocalStorage save duration
+- Table update time
+- Total collect cycle time
+
+Panel state is remembered in localStorage.
 
 ## 📂 Project Structure
 
