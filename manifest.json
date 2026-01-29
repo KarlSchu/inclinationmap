@@ -1,0 +1,21 @@
+{
+  "name": "GPS & Phone Inclination Logger",
+  "short_name": "Inclination Logger",
+  "start_url": "./measures.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2196F3",
+  "description": "Log GPS coordinates and phone inclination; works offline.",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

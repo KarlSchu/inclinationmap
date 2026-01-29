@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#2196F3">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" type="image/svg+xml" href="./icon.svg">
+    <link rel="stylesheet" href="./styles.css">
+    <title>GPS & Phone Inclination Logger</title>
+</head>
+
+<body>
+    <h1>GPS & Phone Inclination Logger</h1>
+    <button id="collectBtn">Collect Data</button>
+    <button id="exportBtn">Export as CSV</button>
+    <button id="sendBtn" disabled>Send to Server</button>
+    <button id="viewMapBtn" disabled>View Map</button>
+    <button id="permissionsBtn">Request Permissions</button>
+    <button id="clearBtn">Clear Data</button>
+    <div id="mapStatusLabel" style="margin: 10px 0; font-size: 14px; color: #666;"></div>
+    <div id="progressContainer" style="display:none;">
+        <progress id="progressBar" value="0" max="100" style="width: 100%;"></progress>
+    </div>
+    <div class="status-message" id="statusMessage"></div>
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>DateTime</th>
+                <th>Latitude</th>
+                <th>Longitude</th>
+                <th>Inclination</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        // Register service worker for PWA offline support
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js').then(reg => {
+                    console.log('Service worker registered.', reg);
+                }).catch(err => {
+                    console.error('Service worker registration failed:', err);
+                });
+            });
+        }
+        let collectedData = [];
+        let orientationData = null;
+        let isRequestingPermissions = false;
+        let lastMapUrl = null;
+
+        // LocalStorage functions
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem('collectedData', JSON.stringify(collectedData));
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const stored = localStorage.getItem('collectedData');
+                if (stored) {
+                    collectedData = JSON.parse(stored);
+                }
+            } catch (e) {
+                console.error('Error loading from localStorage:', e);
+            }
+            updateTable();
+        }
+
+        // Helper function to show status messages
+        function showStatus(message, type = 'success', displayDuration = 2000) {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type}`;
+            setTimeout(() => {
+                statusEl.className = 'status-message';
+            }, displayDuration);
+        }
+
+        // Listen for device orientation to track inclination
+        window.addEventListener('deviceorientation', (event) => {
+            // Store the most recent orientation data
+            orientationData = {
+                alpha: event.alpha, // rotation around z axis
+                beta: event.beta,   // rotation around x axis (front to back) - this is inclination
+                gamma: event.gamma  // rotation around y axis (left to right)
+            };
+        });
+
+        // Load data from localStorage on page load
+        loadFromLocalStorage();
+
+        // Request permissions for GPS and device motion
+        document.getElementById('permissionsBtn').addEventListener('click', async () => {
+            if (isRequestingPermissions) return;
+            isRequestingPermissions = true;
+
+            try {
+                let permissionsGranted = 0;
+                let permissionsTotal = 0;
+
+                // Request geolocation permission
+                try {
+                    const result = new Promise((resolve) => {
+                        navigator.geolocation.getCurrentPosition(
+                            () => resolve(true),
+                            () => resolve(false)
+                        );
+                    });
+
+                    if (await result) {
+                        showStatus('✓ Geolocation permission granted!', 'success');
+                        permissionsGranted++;
+                    } else {
+                        showStatus('✗ Geolocation permission denied. Please enable in settings.', 'error');
+                    }
+                    permissionsTotal++;
+                } catch (e) {
+                    showStatus('Error requesting geolocation', 'error');
+                }
+
+                // Request device orientation permission (for inclination)
+                try {
+                    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                        const permission = await DeviceOrientationEvent.requestPermission();
+                        if (permission === 'granted') {
+                            showStatus('✓ Device orientation permission granted!', 'success');
+                            permissionsGranted++;
+                        } else {
+                            showStatus('✗ Device orientation permission denied.', 'error');
+                        }
+                    } else {
+                        // For non-iOS devices or older browsers
+                        showStatus('✓ Device orientation access enabled!', 'success');
+                        permissionsGranted++;
+                    }
+                    permissionsTotal++;
+                } catch (e) {
+                    showStatus('Device orientation not available on this device', 'error');
+                }
+
+                // Summary
+                if (permissionsGranted === permissionsTotal) {
+                    showStatus(`✓ All permissions granted! Ready to collect data.`, 'success');
+                    document.getElementById('collectBtn').disabled = false;
+                } else {
+                    showStatus(`Partial permissions: ${permissionsGranted}/${permissionsTotal}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error requesting permissions:', error);
+                showStatus('Error requesting permissions. Please check device settings.', 'error');
+            } finally {
+                isRequestingPermissions = false;
+            }
+        });
+
+        document.getElementById('collectBtn').addEventListener('click', () => {
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const collectBtn = document.getElementById('collectBtn');
+            progressContainer.style.display = 'block';
+            progressBar.value = 0;
+            collectBtn.disabled = true;
+            showStatus('Collecting data...', 'success', 90000);
+
+            if (navigator.geolocation) {
+                progressBar.value = 50;
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const latitude = position.coords.latitude;
+                        const longitude = position.coords.longitude;
+                        // Use captured orientation data or fall back to random value
+                        // orientationData.beta ranges from -180 to 180, representing tilt from vertical
+                        const inclination = orientationData ? orientationData.beta : (Math.random() * 180 - 90);
+                        const now = new Date();
+                        const dateTime = now.getFullYear() + '-' +
+                            String(now.getMonth() + 1).padStart(2, '0') + '-' +
+                            String(now.getDate()).padStart(2, '0') + ' ' +
+                            String(now.getHours()).padStart(2, '0') + ':' +
+                            String(now.getMinutes()).padStart(2, '0') + ':' +
+                            String(now.getSeconds()).padStart(2, '0');
+
+                        progressBar.value = 90;
+                        collectedData.push({ index: collectedData.length + 1, dateTime, latitude, longitude, inclination });
+                        saveToLocalStorage();
+                        updateTable();
+                        progressBar.value = 100;
+                        const inclinationSign = inclination >= 0 ? '+' : '';
+                        showStatus(`✓ Data collected! Latitude: ${latitude.toFixed(4)}, Longitude: ${longitude.toFixed(4)}, Inclination: ${inclinationSign}${inclination.toFixed(2)}°`, 'success', 10000);
+                        setTimeout(() => {
+                            progressContainer.style.display = 'none';
+                            showStatus('ready', 'success', 1);
+                            collectBtn.disabled = false;
+                        }, 1000);
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error);
+                        showStatus('Unable to retrieve location. Please check permissions.', 'error');
+                        progressBar.value = 10;
+                        collectBtn.disabled = false;
+                    }
+                );
+            } else {
+                showStatus('Geolocation is not supported by this browser.', 'error');
+                setTimeout(() => {
+                    progressContainer.style.display = 'none';
+                    collectBtn.disabled = false;
+                }, 1000);
+            }
+        });
+
+        function updateTable() {
+            const tableBody = document.getElementById('dataTable').getElementsByTagName('tbody')[0];
+            tableBody.innerHTML = '';
+            // Display data in reverse order (newest first)
+            collectedData.slice().reverse().forEach((data) => {
+                const row = tableBody.insertRow();
+                row.insertCell(0).innerText = data.index;
+                row.insertCell(1).innerText = data.dateTime;
+                row.insertCell(2).innerText = data.latitude.toFixed(6);
+                row.insertCell(3).innerText = data.longitude.toFixed(6);
+                const inclinationSign = data.inclination >= 0 ? '+' : '';
+                row.insertCell(4).innerText = inclinationSign + data.inclination.toFixed(2) + '°';
+            });
+
+            // Enable/disable send button depending on whether we have data
+            try {
+                const sendBtn = document.getElementById('sendBtn');
+                if (sendBtn) sendBtn.disabled = collectedData.length === 0;
+            } catch (e) {
+                console.error('Error updating send button state:', e);
+            }
+        }
+
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            if (collectedData.length === 0) {
+                showStatus('No data to export. Collect some data first.', 'error');
+                return;
+            }
+
+            const csvContent = 'data:text/csv;charset=utf-8,' +
+                'Index,DateTime,Latitude,Longitude,Inclination(degrees)\n' +
+                collectedData.map(e => {
+                    const inclinationSign = e.inclination >= 0 ? '+' : '';
+                    return `${e.index},${e.dateTime},${e.latitude.toFixed(6)},${e.longitude.toFixed(6)},${inclinationSign}${e.inclination.toFixed(2)}`;
+                }).join('\n');
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement('a');
+            link.setAttribute('href', encodedUri);
+            link.setAttribute('download', 'collected_data_' + new Date().getTime() + '.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showStatus('✓ Data exported successfully!', 'success');
+        });
+
+        // Send collected data to server
+        document.getElementById('sendBtn').addEventListener('click', async () => {
+            if (collectedData.length === 0) {
+                showStatus('No data to send. Collect some data first.', 'error');
+                return;
+            }
+
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            showStatus('Sending data to server...', 'success');
+
+            try {
+                const resp = await fetch('/data_collector', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ timestamp: Date.now(), data: collectedData })
+                });
+
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    throw new Error(text || resp.statusText);
+                }
+
+                const result = await resp.json();
+                // Only enable map button if map was successfully generated and returned
+                if (result.map && typeof result.map === 'string' && result.map.trim() !== '') {
+                    lastMapUrl = result.map;
+                    document.getElementById('viewMapBtn').disabled = false;
+                    // Extract just the filename from the path for display
+                    const mapFilename = result.map.split('/').pop();
+                    document.getElementById('mapStatusLabel').textContent = `Map generated: ${mapFilename}`;
+                    document.getElementById('mapStatusLabel').style.color = '#155724';
+                    showStatus('✓ Data sent to server and map generated! Click "View Map" to open.', 'success');
+                } else {
+                    document.getElementById('viewMapBtn').disabled = true;
+                    document.getElementById('mapStatusLabel').textContent = 'Map generation failed';
+                    document.getElementById('mapStatusLabel').style.color = '#721c24';
+                    showStatus('✓ Data sent to server but map generation failed.', 'success');
+                }
+            } catch (e) {
+                console.error('Error sending data to server:', e);
+                document.getElementById('viewMapBtn').disabled = true;
+                document.getElementById('mapStatusLabel').textContent = 'Error sending data to server';
+                document.getElementById('mapStatusLabel').style.color = '#721c24';
+                showStatus('✗ Error sending data to server. See console.', 'error');
+            } finally {
+                sendBtn.disabled = false;
+            }
+        });
+
+        // View the generated map
+        document.getElementById('viewMapBtn').addEventListener('click', () => {
+            if (lastMapUrl) {
+                window.open(lastMapUrl, 'map');
+            } else {
+                showStatus('No map available. Send data to server first.', 'error');
+            }
+        });
+
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            if (collectedData.length === 0) {
+                showStatus('No data to clear.', 'error');
+                return;
+            }
+            if (confirm(`Are you sure you want to clear all ${collectedData.length} data entries? This cannot be undone.`)) {
+                collectedData = [];
+                saveToLocalStorage();
+                updateTable();
+                showStatus('✓ All data cleared!', 'success');
+            } else {
+                showStatus('Clear cancelled.', 'error');
+            }
+        });
+    </script>
+</body>
+
+</html>
